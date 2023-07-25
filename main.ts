@@ -13,7 +13,9 @@ const handler = async (
     case "signup": {
       if (connInfo.remoteAddr.transport === "tcp") {
         if (connInfo.remoteAddr.hostname !== Deno.env.get("AUTHENTIK_IP")) {
-          console.log("Request not from Authentik");
+          console.log(
+            `Request from ${connInfo.remoteAddr.hostname} (not Authentik)`
+          );
           return new Response("not authentik");
         }
       } else {
@@ -21,22 +23,12 @@ const handler = async (
         return new Response("not tcp");
       }
 
-      const { username, ssh }: { username: string; ssh: string } =
+      const { username, name, ssh }: { username: string; ssh: string } =
         await request.json();
-
-      const passwdCommand = new Deno.Command("getent", {
-        args: ["passwd"],
-      });
-      const { passwdStdout } = await passwdCommand.output();
-      const passwd = new TextDecoder().decode(passwdStdout);
-      if (passwd.includes(username)) {
-        console.log(`Username ${username} already exists`);
-        return new Response("user exists");
-      }
 
       console.log(`Creating user ${username}`);
       const createCommand = new Deno.Command("./create.sh", {
-        args: [username, ssh],
+        args: [username, name, ssh],
       });
 
       const { code } = await createCommand.output();
@@ -44,16 +36,18 @@ const handler = async (
         console.log(
           `Failed to create user ${username}, script exited with code ${code}`
         );
+        return new Response("failed");
       }
 
       console.log(`Created user ${username}`);
       return new Response("signup");
     }
-    case "users":
-      return new Response("users");
     default:
       return new Response("default");
   }
 };
 
+console.log(
+  `Starting server with AUTHENTIK_IP set to ${Deno.env.get("AUTHENTIK_IP")}`
+);
 serve(handler, { port: 3000 });
